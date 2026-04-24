@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bubble Dragon 2P</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { background: linear-gradient(#7ec8ff, #ffe6a7); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
+    h1 { margin: 0 0 8px; color: #2b2a4c; text-align: center; }
+    .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px; flex-wrap: wrap; }
+    .panel { background: rgba(255,255,255,.85); border: 2px solid #2b2a4c; border-radius: 14px; padding: 10px 12px; box-shadow: 0 10px 22px rgba(0,0,0,.12); }
+    .panel b { color: #2b2a4c; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; }
+    canvas { display: block; margin: 10px auto 0; border-radius: 18px; border: 4px solid #2b2a4c; box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <h1>🐉 Bubble Dragon (2 Player)</h1>
+
+    <div class="bar">
+      <div class="panel mono">
+        <b>P1:</b> A/D aim, hold W to rapid-fire
+      </div>
+      <div class="panel mono">
+        <b>P2:</b> ←/→ aim, hold ↑ to rapid-fire
+      </div>
+      <div class="panel mono">
+        <b>R</b> restart
+      </div>
+    </div>
+
+    <canvas id="game" width="940" height="860"></canvas>
+
+    <div class="bar">
+      <div class="panel mono" id="p1hud"></div>
+      <div class="panel mono" id="status"></div>
+      <div class="panel mono" id="p2hud"></div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    // Two side-by-side boards
+    const BOARD_W = 420;
+    const BOARD_H = 820;
+    const GAP = 20;
+    const RADIUS = 18;
+    const COLS = 11;
+    const ROWS = 14;
+    const SHOT_SPEED = 7;
+    const FIRE_INTERVAL = 150; // ms
+    const GRAVITY = 0.85;
+
+    const COLORS = ["#ff4d6d", "#ffbe0b", "#3a86ff", "#00f5d4", "#8338ec"];
+
+    const hud = {
+      p1: document.getElementById("p1hud"),
+      p2: document.getElementById("p2hud"),
+      status: document.getElementById("status"),
+    };
+
+    function randomColor() { return COLORS[(Math.random() * COLORS.length) | 0]; }
+
+    function inBounds(x, y) {
+      return x >= 0 && x < COLS && y >= 0 && y < ROWS;
+    }
+
+    class Board {
+      constructor(index, offsetX) {
+        this.index = index;
+        this.offsetX = offsetX;
+
+        this.grid = [];
+        this.resetGrid();
+
+        this.shooter = {
+          baseX: offsetX + BOARD_W / 2,
+          baseY: BOARD_H - 40,
+          angle: Math.PI / 2,
+          fireHeld: false,
+          lastFire: 0,
+          nextBubble: randomColor(),
+          dead: false,
+          score: 0,
+          startTime: performance.now(),
+          deadTime: null,
+        };
+
+        this.shots = [];
+      }
+
+      resetGrid() {
+        this.grid = [];
+        for (let r = 0; r < ROWS; r++) {
+          this.grid[r] = [];
+          for (let c = 0; c < COLS; c++) {
+            // Seed first few rows
+            this.grid[r][c] = r < 4 ? randomColor() : null;
+          }
+        }
+      }
+
+      cellCenter(c, r) {
+        const x = this.offsetX + c * (RADIUS * 2) + RADIUS;
+        const y = r * (RADIUS * 2) + RADIUS + 60; // header room
+        return [x, y];
+      }
+
+      fire(now) {
+        if (this.shooter.dead) return;
+        if (now - this.shooter.lastFire < FIRE_INTERVAL) return;
+        this.shooter.lastFire = now;
+
+        const angle = this.shooter.angle;
+        const bubble = {
+          x: this.shooter.baseX,
+          y: this.shooter.baseY,
+          dx: Math.cos(angle) * SHOT_SPEED,
+          dy: -Math.sin(angle) * SHOT_SPEED,
+          color: this.shooter.nextBubble,
+          resting: false,
+        };
+        this.shots.push(bubble);
+        this.shooter.nextBubble = randomColor();
+      }
+
+      updateShots(dt) {
+        // dt in ms
+        const gravityPerFrame = GRAVITY * (dt / 16.67);
+
+        for (const b of this.shots) {
+          b.x += b.dx;
+          b.y += b.dy;
+
+          // bounce off board walls
+          if (b.x < this.offsetX + RADIUS) {
+            b.x = this.offsetX + RADIUS;
+            b.dx *= -1;
+          }
+          if (b.x > this.offsetX + BOARD_W - RADIUS) {
+            b.x = this.offsetX + BOARD_W - RADIUS;
+            b.dx *= -1;
+          }
+          // slight downward drift to simulate pressure
+          b.dy += gravityPerFrame;
+
+          // ceiling
+          if (b.y < 60 + RADIUS) {
+            b.resting = true;
+            this.attachBubble(b.x, b.y, b.color);
+          }
+
+          // collision with grid bubbles
+          if (!b.resting) {
+            for (let r = 0; r < ROWS; r++) {
+              for (let c = 0; c < COLS; c++) {
+                const clr = this.grid[r][c];
+                if (!clr) continue;
+                const [cx, cy] = this.cellCenter(c, r);
+                const dist = Math.hypot(b.x - cx, b.y - cy);
+                if (dist < RADIUS * 2 - 2) {
+                  b.resting = true;
+                  this.attachBubble(b.x, b.y, b.color);
+                  break;
+                }
+              }
+              if (b.resting) break;
+            }
+          }
+        }
+
+        // remove resting bubbles
+        this.shots = this.shots.filter((b) => !b.resting);
+      }
+
+      attachBubble(x, y, color) {
+        // snap to nearest grid cell
+        let c = Math.round((x - this.offsetX - RADIUS) / (RADIUS * 2));
+        let r = Math.round((y - (60 + RADIUS)) / (RADIUS * 2));
+        if (!inBounds(c, r)) return;
+
+        // find nearest empty slot around target
+        const candidates = [];
+        for (let rr = r - 1; rr <= r + 1; rr++) {
+          for (let cc = c - 1; cc <= c + 1; cc++) {
+            if (!inBounds(cc, rr)) continue;
+            if (this.grid[rr][cc]) continue;
+            const [cx, cy] = this.cellCenter(cc, rr);
+            candidates.push({
+              cc,
+              rr,
+              dist: Math.hypot(cx - x, cy - y),
+            });
+          }
+        }
+
+        if (!candidates.length) {
+          // fallback to current cell if empty
+          if (!this.grid[r][c]) this.grid[r][c] = color;
+        } else {
+          candidates.sort((a, b) => a.dist - b.dist);
+          this.grid[candidates[0].rr][candidates[0].cc] = color;
+        }
+
+        // match + drop
+        this.resolveMatches();
+      }
+
+      resolveMatches() {
+        // match 3+ same color
+        const visited = new Set();
+        const toRemove = new Set();
+
+        const dirs = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ];
+
+        function key(c, r) { return `${c},${r}`; }
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const color = this.grid[r][c];
+            if (!color) continue;
+
+            const startKey = key(c, r);
+            if (visited.has(startKey)) continue;
+
+            // BFS
+            const q = [[c, r]];
+            const group = [];
+            visited.add(startKey);
+
+            while (q.length) {
+              const [cc, rr] = q.shift();
+              group.push([cc, rr]);
+              for (const [dx, dy] of dirs) {
+                const nc = cc + dx;
+                const nr = rr + dy;
+                if (!inBounds(nc, nr)) continue;
+                if (this.grid[nr][nc] !== color) continue;
+                const k = key(nc, nr);
+                if (visited.has(k)) continue;
+                visited.add(k);
+                q.push([nc, nr]);
+              }
+            }
+
+            if (group.length >= 3) {
+              for (const [cc, rr] of group) toRemove.add(key(cc, rr));
+            }
+          }
+        }
+
+        if (toRemove.size > 0) {
+          for (const k of toRemove) {
+            const [cStr, rStr] = k.split(",");
+            this.grid[+rStr][+cStr] = null;
+          }
+          this.shooter.score += toRemove.size * 10;
+          this.dropFloating();
+        }
+      }
+
+      dropFloating() {
+        // any bubble not connected to top row should drop
+        const visited = new Set();
+        const dirs = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ];
+
+        function key(c, r) { return `${c},${r}`; }
+
+        // flood fill from top row
+        for (let c = 0; c < COLS; c++) {
+          const color = this.grid[0][c];
+          if (!color) continue;
+          const q = [[c, 0]];
+          visited.add(key(c, 0));
+          while (q.length) {
+            const [cc, rr] = q.shift();
+            for (const [dx, dy] of dirs) {
+              const nc = cc + dx;
+              const nr = rr + dy;
+              if (!inBounds(nc, nr)) continue;
+              if (!this.grid[nr][nc]) continue;
+              const k = key(nc, nr);
+              if (visited.has(k)) continue;
+              visited.add(k);
+              q.push([nc, nr]);
+            }
+          }
+        }
+
+        // remove any bubbles not visited
+        let dropped = 0;
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const clr = this.grid[r][c];
+            if (!clr) continue;
+            if (!visited.has(key(c, r))) {
+              this.grid[r][c] = null;
+              dropped++;
+            }
+          }
+        }
+        if (dropped > 0) this.shooter.score += dropped * 5;
+      }
+
+      checkLose(now) {
+        if (this.shooter.dead) return;
+        // lose if any bubble below threshold
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (!this.grid[r][c]) continue;
+            const [, cy] = this.cellCenter(c, r);
+            if (cy > this.shooter.baseY - 30) {
+              this.shooter.dead = true;
+              this.shooter.deadTime = now;
+              return;
+            }
+          }
+        }
+      }
+
+      drawBoardBg() {
+        ctx.save();
+        ctx.fillStyle = this.index === 0 ? "#ffc6ff" : "#fdffb6";
+        ctx.strokeStyle = "#2b2a4c";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(this.offsetX, 40, BOARD_W, BOARD_H - 40, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        function cloud(x, y, w) {
+          ctx.beginPath();
+          ctx.arc(x, y, w * 0.22, 0, Math.PI * 2);
+          ctx.arc(x + w * 0.25, y - w * 0.12, w * 0.25, 0, Math.PI * 2);
+          ctx.arc(x + w * 0.55, y - w * 0.05, w * 0.3, 0, Math.PI * 2);
+          ctx.arc(x + w * 0.75, y, w * 0.22, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,255,255,.8)";
+          ctx.fill();
+        }
+        cloud(this.offsetX + 60, 80, 70);
+        cloud(this.offsetX + 320, 70, 80);
+        ctx.restore();
+      }
+
+      drawBubble(x, y, color) {
+        ctx.save();
+        const aliveGlow = this.shooter.dead ? 0 : 10;
+        ctx.shadowColor = `${color}AA`;
+        ctx.shadowBlur = aliveGlow;
+        ctx.beginPath();
+        ctx.arc(x, y, RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,.85)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(x - 6, y - 6, 6, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.fill();
+        ctx.restore();
+      }
+
+      drawDinoShooter() {
+        const s = this.shooter;
+        const cx = s.baseX;
+        const cy = s.baseY;
+        const angle = s.angle;
+
+        const tipX = cx + Math.cos(angle) * 44;
+        const tipY = cy - Math.sin(angle) * 44;
+
+        ctx.save();
+
+        ctx.fillStyle = this.index === 0 ? "#58d68d" : "#ff7f50";
+        ctx.strokeStyle = "#2b2a4c";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(cx - 60, cy - 34, 120, 48, 18);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx + 50, cy + 10);
+        ctx.quadraticCurveTo(cx + 90, cy + 26, cx + 110, cy + 8);
+        ctx.quadraticCurveTo(cx + 70, cy + 22, cx + 60, cy);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.roundRect(cx - 66, cy - 60, 80, 50, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx - 38, cy - 46, 6, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx - 38, cy - 46, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#2b2a4c";
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(cx - 55, cy - 26);
+        ctx.lineTo(cx - 25, cy - 20);
+        ctx.stroke();
+
+        ctx.fillStyle = "#f7e018";
+        ctx.beginPath();
+        ctx.moveTo(cx - 10, cy - 60);
+        ctx.lineTo(cx, cy - 90);
+        ctx.lineTo(cx + 10, cy - 60);
+        ctx.fill();
+
+        ctx.translate(cx, cy);
+        ctx.rotate(-angle);
+
+        ctx.fillStyle = "#2b2a4c";
+        ctx.beginPath();
+        ctx.roundRect(-10, -40, 20, 60, 10);
+        ctx.fill();
+
+        ctx.fillStyle = "#9aa0ff";
+        ctx.beginPath();
+        ctx.roundRect(-12, -52, 24, 22, 12);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255,255,255,.85)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -52, 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+
+        this.drawBubble(cx + 62, cy - 10, s.nextBubble);
+
+        return [tipX, tipY];
+      }
+
+      drawHud() {
+        const s = this.shooter;
+        const alive = !s.dead;
+        const t = alive ? performance.now() : s.deadTime;
+        const seconds = Math.floor((t - s.startTime) / 1000);
+        const name = this.index === 0 ? "P1" : "P2";
+        hud[name.toLowerCase()].textContent = `${name} score: ${s.score} | time: ${seconds}s ${alive ? "" : "(OUT)"}`;
+      }
+
+      draw() {
+        this.drawBoardBg();
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const color = this.grid[r][c];
+            if (!color) continue;
+            const [x, y] = this.cellCenter(c, r);
+            this.drawBubble(x, y, color);
+          }
+        }
+        for (const b of this.shots) this.drawBubble(b.x, b.y, b.color);
+        this.drawDinoShooter();
+      }
+    }
+
+    const board1 = new Board(0, (canvas.width - (BOARD_W * 2 + GAP)) / 2);
+    const board2 = new Board(1, board1.offsetX + BOARD_W + GAP);
+
+    const keys = new Map();
+
+    function clamp(val, lo, hi) {
+      return Math.max(lo, Math.min(hi, val));
+    }
+
+    function updateAngles() {
+      const minA = 0.1;
+      const maxA = Math.PI - 0.1;
+      if (keys.get("a")) board1.shooter.angle = clamp(board1.shooter.angle + 0.06, minA, maxA);
+      if (keys.get("d")) board1.shooter.angle = clamp(board1.shooter.angle - 0.06, minA, maxA);
+      if (keys.get("arrowleft")) board2.shooter.angle = clamp(board2.shooter.angle + 0.06, minA, maxA);
+      if (keys.get("arrowright")) board2.shooter.angle = clamp(board2.shooter.angle - 0.06, minA, maxA);
+    }
+
+    let lastFrame = performance.now();
+
+    function loop(now) {
+      const dt = now - lastFrame;
+      lastFrame = now;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      updateAngles();
+
+      if (board1.shooter.fireHeld) board1.fire(now);
+      if (board2.shooter.fireHeld) board2.fire(now);
+
+      board1.updateShots(dt);
+      board2.updateShots(dt);
+
+      board1.checkLose(now);
+      board2.checkLose(now);
+
+      board1.draw();
+      board2.draw();
+
+      board1.drawHud();
+      board2.drawHud();
+
+      const p1Alive = !board1.shooter.dead;
+      const p2Alive = !board2.shooter.dead;
+
+      if (p1Alive && p2Alive) {
+        hud.status.textContent = "Keep clearing bubbles!";
+      } else {
+        hud.status.textContent = decideWinner();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    function decideWinner() {
+      const p1 = board1.shooter;
+      const p2 = board2.shooter;
+
+      const p1Time = (p1.dead ? p1.deadTime : performance.now()) - p1.startTime;
+      const p2Time = (p2.dead ? p2.deadTime : performance.now()) - p2.startTime;
+
+      if (!p1.dead && p2.dead) return "P1 wins (P2 ran out)!";
+      if (p1.dead && !p2.dead) return "P2 wins (P1 ran out)!";
+
+      if (p1.dead && p2.dead) {
+        if (p1.score !== p2.score) return p1.score > p2.score ? "P1 wins (higher score)!" : "P2 wins (higher score)!";
+        if (p1Time !== p2Time) return p1Time > p2Time ? "P1 wins (longer survival)!" : "P2 wins (longer survival)!";
+        return "Draw";
+      }
+
+      return "";
+    }
+
+    function reset() {
+      board1.resetGrid();
+      board2.resetGrid();
+
+      const now = performance.now();
+      for (const b of [board1, board2]) {
+        b.shots = [];
+        b.shooter.dead = false;
+        b.shooter.score = 0;
+        b.shooter.startTime = now;
+        b.shooter.deadTime = null;
+        b.shooter.lastFire = 0;
+        b.shooter.nextBubble = randomColor();
+        b.shooter.fireHeld = false;
+        b.shooter.angle = Math.PI / 2;
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      keys.set(k, true);
+
+      if (k === "w") board1.shooter.fireHeld = true;
+      if (k === "arrowup") board2.shooter.fireHeld = true;
+      if (k === "r") reset();
+    });
+
+    document.addEventListener("keyup", (e) => {
+      const k = e.key.toLowerCase();
+      keys.set(k, false);
+      if (k === "w") board1.shooter.fireHeld = false;
+      if (k === "arrowup") board2.shooter.fireHeld = false;
+    });
+
+    reset();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
