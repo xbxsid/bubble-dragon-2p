@@ -54,7 +54,7 @@
     const ROWS = 14;
     const SHOT_SPEED = 7;
     const FIRE_INTERVAL = 150; // ms
-    const GRAVITY = 0.85;
+    const GRAVITY = 0; // <-- 修正：不让子弹下坠
 
     const COLORS = ["#ff4d6d", "#ffbe0b", "#3a86ff", "#00f5d4", "#8338ec"];
 
@@ -118,8 +118,8 @@
 
         const angle = this.shooter.angle;
         const bubble = {
-          x: this.shooter.baseX + Math.cos(angle)*44,
-          y: this.shooter.baseY - Math.sin(angle)*44,
+          x: this.shooter.baseX + Math.cos(angle) * 44,
+          y: this.shooter.baseY - Math.sin(angle) * 44,
           dx: Math.cos(angle) * SHOT_SPEED,
           dy: -Math.sin(angle) * SHOT_SPEED,
           color: this.shooter.nextBubble,
@@ -146,7 +146,8 @@
             b.x = this.offsetX + BOARD_W - RADIUS;
             b.dx *= -1;
           }
-          // slight downward drift to simulate pressure
+
+          // drift removed by setting GRAVITY=0 (keeps code simple)
           b.dy += gravityPerFrame;
 
           // ceiling
