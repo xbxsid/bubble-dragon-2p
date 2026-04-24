@@ -54,7 +54,7 @@
     const ROWS = 14;
     const SHOT_SPEED = 7;
     const FIRE_INTERVAL = 150; // ms
-    const GRAVITY = 0; // <-- 修正：不让子弹下坠
+    const GRAVITY = 0; // no fall / no drift
 
     const COLORS = ["#ff4d6d", "#ffbe0b", "#3a86ff", "#00f5d4", "#8338ec"];
 
@@ -92,6 +92,46 @@
         };
 
         this.shots = [];
+        this.scorePops = []; // animations for scoring
+      }
+
+      addScorePop(delta) {
+        this.scorePops.push({
+          text: `+${delta}`,
+          x: this.offsetX + BOARD_W / 2,
+          y: 68,
+          t0: performance.now(),
+          duration: 900,
+          color: this.index === 0 ? "#58d68d" : "#ff7f50",
+        });
+      }
+
+      drawScorePops(now) {
+        this.scorePops = this.scorePops.filter(p => {
+          const t = (now - p.t0) / p.duration;
+          if (t >= 1) return false;
+
+          const alpha = 1 - t;
+          const y = p.y - t * 38;
+
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = "700 28px ui-sans-serif, system-ui, -apple-system";
+
+          ctx.shadowColor = `${p.color}FF`;
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = "rgba(255,255,255,0.95)";
+          ctx.strokeStyle = "rgba(43,42,76,0.35)";
+          ctx.lineWidth = 4;
+
+          ctx.strokeText(p.text, p.x, y);
+          ctx.fillText(p.text, p.x, y);
+
+          ctx.restore();
+          return true;
+        });
       }
 
       resetGrid() {
@@ -147,7 +187,7 @@
             b.dx *= -1;
           }
 
-          // drift removed by setting GRAVITY=0 (keeps code simple)
+          // drift removed by GRAVITY=0
           b.dy += gravityPerFrame;
 
           // ceiling
@@ -261,11 +301,13 @@
         }
 
         if (toRemove.size > 0) {
+          const delta = toRemove.size * 10;
           for (const k of toRemove) {
             const [cStr, rStr] = k.split(",");
             this.grid[+rStr][+cStr] = null;
           }
-          this.shooter.score += toRemove.size * 10;
+          this.shooter.score += delta;
+          this.addScorePop(delta);
           this.dropFloating();
         }
       }
@@ -315,7 +357,11 @@
             }
           }
         }
-        if (dropped > 0) this.shooter.score += dropped * 5;
+        if (dropped > 0) {
+          const delta = dropped * 5;
+          this.shooter.score += delta;
+          this.addScorePop(delta);
+        }
       }
 
       checkLose(now) {
@@ -386,9 +432,6 @@
         const cy = s.baseY;
         const angle = s.angle;
 
-        const tipX = cx + Math.cos(angle) * 44;
-        const tipY = cy - Math.sin(angle) * 44;
-
         ctx.save();
 
         ctx.fillStyle = this.index === 0 ? "#58d68d" : "#ff7f50";
@@ -455,8 +498,6 @@
         ctx.restore();
 
         this.drawBubble(cx + 62, cy - 10, s.nextBubble);
-
-        return [tipX, tipY];
       }
 
       drawHud() {
@@ -468,8 +509,10 @@
         hud[name.toLowerCase()].textContent = `${name} score: ${s.score} | time: ${seconds}s ${alive ? "" : "(OUT)"}`;
       }
 
-      draw() {
+      draw(now) {
         this.drawBoardBg();
+        this.drawScorePops(now);
+
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c < COLS; c++) {
             const color = this.grid[r][c];
@@ -520,8 +563,8 @@
       board1.checkLose(now);
       board2.checkLose(now);
 
-      board1.draw();
-      board2.draw();
+      board1.draw(now);
+      board2.draw(now);
 
       board1.drawHud();
       board2.drawHud();
@@ -572,6 +615,7 @@
         b.shooter.nextBubble = randomColor();
         b.shooter.fireHeld = false;
         b.shooter.angle = Math.PI / 2;
+        b.scorePops = [];
       }
     }
 
