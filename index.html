@@ -118,8 +118,8 @@
 
         const angle = this.shooter.angle;
         const bubble = {
-          x: this.shooter.baseX,
-          y: this.shooter.baseY,
+          x: this.shooter.baseX + Math.cos(angle)*44,
+          y: this.shooter.baseY - Math.sin(angle)*44,
           dx: Math.cos(angle) * SHOT_SPEED,
           dy: -Math.sin(angle) * SHOT_SPEED,
           color: this.shooter.nextBubble,
