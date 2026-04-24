@@ -84,6 +84,7 @@
           angle: Math.PI / 2,
           fireHeld: false,
           lastFire: 0,
+          currentBubble: randomColor(),
           nextBubble: randomColor(),
           dead: false,
           score: 0,
@@ -92,7 +93,7 @@
         };
 
         this.shots = [];
-        this.scorePops = []; // animations for scoring
+        this.scorePops = [];
       }
 
       addScorePop(delta) {
@@ -162,10 +163,12 @@
           y: this.shooter.baseY - Math.sin(angle) * 44,
           dx: Math.cos(angle) * SHOT_SPEED,
           dy: -Math.sin(angle) * SHOT_SPEED,
-          color: this.shooter.nextBubble,
+          color: this.shooter.currentBubble,
           resting: false,
         };
         this.shots.push(bubble);
+
+        this.shooter.currentBubble = this.shooter.nextBubble;
         this.shooter.nextBubble = randomColor();
       }
 
@@ -434,48 +437,93 @@
 
         ctx.save();
 
-        ctx.fillStyle = this.index === 0 ? "#58d68d" : "#ff7f50";
+        const body = this.index === 0 ? "#58d68d" : "#ff7f50";
+        const cheek = this.index === 0 ? "#ffb6c1" : "#ffd1b5";
+
         ctx.strokeStyle = "#2b2a4c";
         ctx.lineWidth = 3;
+
+        // tail-ish piece (left/back)
+        ctx.fillStyle = body;
         ctx.beginPath();
-        ctx.roundRect(cx - 60, cy - 34, 120, 48, 18);
+        ctx.moveTo(cx - 70, cy + 8);
+        ctx.quadraticCurveTo(cx - 98, cy - 5, cx - 68, cy - 24);
+        ctx.quadraticCurveTo(cx - 48, cy - 5, cx - 70, cy + 8);
         ctx.fill();
         ctx.stroke();
 
+        // feet
         ctx.beginPath();
-        ctx.moveTo(cx + 50, cy + 10);
-        ctx.quadraticCurveTo(cx + 90, cy + 26, cx + 110, cy + 8);
-        ctx.quadraticCurveTo(cx + 70, cy + 22, cx + 60, cy);
+        ctx.arc(cx - 30, cy + 15, 12, 0, Math.PI * 2);
+        ctx.arc(cx + 30, cy + 15, 12, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
+        // body
         ctx.beginPath();
-        ctx.roundRect(cx - 66, cy - 60, 80, 50, 16);
+        ctx.arc(cx, cy + 2, 38, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
+        // wing
         ctx.beginPath();
-        ctx.arc(cx - 38, cy - 46, 6, 0, Math.PI * 2);
+        ctx.moveTo(cx + 26, cy - 2);
+        ctx.quadraticCurveTo(cx + 50, cy - 10, cx + 50, cy + 10);
+        ctx.quadraticCurveTo(cx + 34, cy + 2, cx + 26, cy - 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // head
+        ctx.beginPath();
+        ctx.arc(cx, cy - 45, 34, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // cheeks
+        ctx.fillStyle = cheek;
+        ctx.beginPath();
+        ctx.arc(cx - 20, cy - 35, 7, 0, Math.PI * 2);
+        ctx.arc(cx + 20, cy - 35, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // eyes
         ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(cx - 12, cy - 52, 8, 0, Math.PI * 2);
+        ctx.arc(cx + 12, cy - 52, 8, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(cx - 38, cy - 46, 2.5, 0, Math.PI * 2);
+
+        // pupils
         ctx.fillStyle = "#2b2a4c";
+        ctx.beginPath();
+        ctx.arc(cx - 10, cy - 50, 3, 0, Math.PI * 2);
+        ctx.arc(cx + 10, cy - 50, 3, 0, Math.PI * 2);
         ctx.fill();
 
+        // eye sparkles
+        ctx.fillStyle = "rgba(255,255,255,.9)";
         ctx.beginPath();
-        ctx.moveTo(cx - 55, cy - 26);
-        ctx.lineTo(cx - 25, cy - 20);
+        ctx.arc(cx - 12.5, cy - 53.5, 2, 0, Math.PI * 2);
+        ctx.arc(cx + 8.5, cy - 52.5, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // mouth
+        ctx.strokeStyle = "#2b2a4c";
+        ctx.beginPath();
+        ctx.moveTo(cx - 12, cy - 26);
+        ctx.quadraticCurveTo(cx, cy - 18, cx + 12, cy - 26);
         ctx.stroke();
 
+        // tiny crown / horn
         ctx.fillStyle = "#f7e018";
         ctx.beginPath();
-        ctx.moveTo(cx - 10, cy - 60);
-        ctx.lineTo(cx, cy - 90);
-        ctx.lineTo(cx + 10, cy - 60);
+        ctx.moveTo(cx - 8, cy - 78);
+        ctx.lineTo(cx, cy - 92);
+        ctx.lineTo(cx + 8, cy - 78);
         ctx.fill();
 
+        // cannon
         ctx.translate(cx, cy);
         ctx.rotate(Math.PI / 2 - angle);
 
@@ -497,7 +545,13 @@
 
         ctx.restore();
 
-        this.drawBubble(cx + 62, cy - 10, s.nextBubble);
+        // held bubble: current
+        const heldX = cx + Math.cos(angle) * 22;
+        const heldY = cy - Math.sin(angle) * 22;
+        this.drawBubble(heldX, heldY, s.currentBubble);
+
+        // tail/back bubble: upcoming
+        this.drawBubble(cx - 64, cy - 10, s.nextBubble);
       }
 
       drawHud() {
@@ -532,7 +586,7 @@
     const keys = new Map();
 
     function clamp(val, lo, hi) {
-      return Math.max(lo, Math.min(hi, val));
+        return Math.max(lo, Math.min(hi, val));
     }
 
     function updateAngles() {
@@ -612,6 +666,7 @@
         b.shooter.startTime = now;
         b.shooter.deadTime = null;
         b.shooter.lastFire = 0;
+        b.shooter.currentBubble = randomColor();
         b.shooter.nextBubble = randomColor();
         b.shooter.fireHeld = false;
         b.shooter.angle = Math.PI / 2;
