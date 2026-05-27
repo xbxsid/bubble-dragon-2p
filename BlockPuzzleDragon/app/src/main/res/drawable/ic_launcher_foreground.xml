@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Dragon emoji style icon -->
+    <path
+        android:fillColor="#FF6B35"
+        android:pathData="M54,24 C44,24 36,32 36,42 L36,60 C36,70 44,78 54,78 C64,78 72,70 72,60 L72,42 C72,32 64,24 54,24z"/>
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M44,50 L54,66 L64,50 Z"/>
+    <path
+        android:fillColor="#1A0A2E"
+        android:pathData="M48,38 C48,36 50,34 52,34 C54,34 56,36 56,38 C56,40 54,42 52,42 C50,42 48,40 48,38z"/>
+    <path
+        android:fillColor="#1A0A2E"
+        android:pathData="M52,38 C52,36 54,34 56,34 C58,34 60,36 60,38 C60,40 58,42 56,42 C54,42 52,40 52,38z"/>
+</vector>

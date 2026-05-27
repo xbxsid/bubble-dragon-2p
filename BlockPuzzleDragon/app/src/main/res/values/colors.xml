@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dragon theme palette -->
+    <color name="dragon_bg">#1A0A2E</color>
+    <color name="dragon_purple">#9B59B6</color>
+    <color name="dragon_gold">#FFD700</color>
+    <color name="dragon_fire">#FF6B35</color>
+    <color name="dragon_red">#E74C3C</color>
+    <color name="dragon_blue">#3498DB</color>
+    <color name="dragon_green">#2ECC71</color>
+    <color name="dragon_amber">#F39C12</color>
+    <color name="dragon_sidebar">#2D1B4E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_muted">#AAB8C2</color>
+</resources>

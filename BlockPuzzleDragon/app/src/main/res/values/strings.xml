@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Block Puzzle Dragon</string>
+    <string name="score">Score</string>
+    <string name="level">Level</string>
+    <string name="lines">Lines</string>
+    <string name="next">Next</string>
+    <string name="high_score">High Score</string>
+    <string name="game_over">Game Over</string>
+    <string name="restart">Restart</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+</resources>
